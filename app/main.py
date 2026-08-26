@@ -40,4 +40,17 @@ app.add_middleware(
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok"}
+    from app.api.routes import get_store
+
+    body: dict = {"status": "ok"}
+    try:
+        store = get_store()
+        counts = {
+            sym: {tf: store.count(sym, tf) for tf in settings.timeframe_list}
+            for sym in settings.symbol_list
+        }
+        total = sum(sum(tfs.values()) for tfs in counts.values())
+        body["db"] = {"total_klines": total, "symbols": counts}
+    except Exception as e:
+        body["db"] = {"error": str(e)}
+    return body

@@ -15,7 +15,9 @@ def client() -> TestClient:
 def test_health_ok(client: TestClient):
     resp = client.get("/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert "db" in body
 
 
 def test_cors_allowed_origin(client: TestClient):

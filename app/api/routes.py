@@ -29,14 +29,29 @@ async def get_klines(
     symbol: str = Query(...),
     timeframe: str = Query(...),
     limit: int = Query(500, ge=1, le=5000),
+    start_time: int | None = Query(None, ge=0),
+    end_time: int | None = Query(None, ge=0),
 ) -> dict:
-    if timeframe not in MS_PER_UNIT:
+    tf_norm = timeframe.lower()
+    if tf_norm not in MS_PER_UNIT:
         raise HTTPException(400, f"invalid timeframe, must be one of {sorted(MS_PER_UNIT)}")
+    if start_time is not None and end_time is not None and start_time >= end_time:
+        raise HTTPException(400, "start_time must be < end_time")
+
+    symbol_u = symbol.upper()
+    tf_l = timeframe.lower()
     store = get_store()
-    rows = store.get_klines(symbol.upper(), timeframe, limit=limit)
+
+    known = {s.upper() for s in settings.symbol_list}
+    if symbol_u not in known:
+        raise HTTPException(404, f"unknown symbol: {symbol_u}")
+
+    start_dt = datetime.fromtimestamp(start_time / 1000, tz=UTC) if start_time else None
+    end_dt = datetime.fromtimestamp(end_time / 1000, tz=UTC) if end_time else None
+    rows = store.get_klines(symbol_u, tf_l, start=start_dt, end=end_dt, limit=limit)
     return {
-        "symbol": symbol.upper(),
-        "timeframe": timeframe,
+        "symbol": symbol_u,
+        "timeframe": tf_l,
         "count": len(rows),
         "data": [
             {
@@ -51,6 +66,20 @@ async def get_klines(
             for r in rows
         ],
     }
+
+
+@router.get("/symbols")
+async def list_symbols() -> dict:
+    """Configured symbols with per-timeframe stored-candle counts."""
+    store = get_store()
+    out = []
+    for sym in settings.symbol_list:
+        tfs = [
+            {"timeframe": tf, "count": store.count(sym, tf)}
+            for tf in settings.timeframe_list
+        ]
+        out.append({"symbol": sym, "timeframes": tfs})
+    return {"symbols": out}
 
 
 class BackfillRequest(BaseModel):
