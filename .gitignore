@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+data/*.duckdb
+data/*.duckdb.wal
+data/rejects/
+.env
+node_modules/
+web/dist/
