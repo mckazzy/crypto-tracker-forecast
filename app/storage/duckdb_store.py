@@ -40,6 +40,53 @@ CREATE TABLE IF NOT EXISTS forecasts (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     token_cost BIGINT NOT NULL DEFAULT 0
 );
+CREATE SEQUENCE IF NOT EXISTS positions_seq START 1;
+CREATE TABLE IF NOT EXISTS positions (
+    id BIGINT PRIMARY KEY DEFAULT nextval('positions_seq'),
+    symbol VARCHAR NOT NULL,
+    timeframe VARCHAR NOT NULL,
+    direction VARCHAR NOT NULL,
+    entry DOUBLE NOT NULL,
+    tp DOUBLE NOT NULL,
+    sl DOUBLE NOT NULL,
+    opened_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    closed_at TIMESTAMPTZ,
+    exit_price DOUBLE,
+    pnl DOUBLE,
+    status VARCHAR NOT NULL DEFAULT 'open',
+    model VARCHAR,
+    source_signal_id BIGINT
+);
+CREATE SEQUENCE IF NOT EXISTS alerts_seq START 1;
+CREATE TABLE IF NOT EXISTS alerts (
+    id BIGINT PRIMARY KEY DEFAULT nextval('alerts_seq'),
+    symbol VARCHAR NOT NULL,
+    timeframe VARCHAR NOT NULL,
+    direction VARCHAR NOT NULL,
+    entry DOUBLE,
+    tp VARCHAR,
+    sl DOUBLE,
+    model VARCHAR,
+    sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    channel VARCHAR NOT NULL,
+    status VARCHAR NOT NULL
+);
+CREATE SEQUENCE IF NOT EXISTS outcomes_seq START 1;
+CREATE TABLE IF NOT EXISTS signal_outcomes (
+    id BIGINT PRIMARY KEY DEFAULT nextval('outcomes_seq'),
+    signal_id BIGINT,
+    symbol VARCHAR NOT NULL,
+    timeframe VARCHAR NOT NULL,
+    model VARCHAR,
+    direction VARCHAR NOT NULL,
+    entry DOUBLE,
+    tp DOUBLE,
+    sl DOUBLE,
+    outcome VARCHAR NOT NULL,
+    user_override BOOLEAN NOT NULL DEFAULT FALSE,
+    resolved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    source VARCHAR NOT NULL DEFAULT 'auto'
+);
 """
 
 REQUIRED_FIELDS = (
@@ -298,6 +345,72 @@ class DuckDBStore:
                 }
                 for r in rows
             ]
+        finally:
+            cur.close()
+
+    # ---- Paper trading (SP4) ----
+
+    def create_position(self, pos: dict) -> int:
+        """Insert position, return id."""
+        cur = self.cursor()
+        try:
+            cur.execute(
+                "INSERT INTO positions (symbol, timeframe, direction, entry, tp, sl, model, source_signal_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                [
+                    pos["symbol"],
+                    pos["timeframe"],
+                    pos["direction"],
+                    pos["entry"],
+                    pos["tp"],
+                    pos["sl"],
+                    pos.get("model"),
+                    pos.get("source_signal_id"),
+                ],
+            )
+            return int(cur.fetchone()[0])
+        finally:
+            cur.close()
+
+    def get_positions(self, status: str | None = None) -> list[dict]:
+        sql = ("SELECT id, symbol, timeframe, direction, entry, tp, sl, opened_at, closed_at, "
+               "exit_price, pnl, status, model, source_signal_id FROM positions")
+        params: list = []
+        if status:
+            sql += " WHERE status = ?"
+            params.append(status)
+        sql += " ORDER BY opened_at DESC"
+        cur = self.cursor()
+        try:
+            rows = cur.execute(sql, params).fetchall()
+            return [
+                {
+                    "id": r[0], "symbol": r[1], "timeframe": r[2], "direction": r[3],
+                    "entry": r[4], "tp": r[5], "sl": r[6],
+                    "opened_at": _ensure_utc(r[7]).isoformat() if r[7] else None,
+                    "closed_at": _ensure_utc(r[8]).isoformat() if r[8] else None,
+                    "exit_price": r[9], "pnl": r[10], "status": r[11],
+                    "model": r[12], "source_signal_id": r[13],
+                }
+                for r in rows
+            ]
+        finally:
+            cur.close()
+
+    def close_position(self, pos_id: int, exit_price: float, pnl: float) -> None:
+        cur = self.cursor()
+        try:
+            cur.execute(
+                "UPDATE positions SET status='closed', closed_at=now(), exit_price=?, pnl=? WHERE id=?",
+                [exit_price, pnl, pos_id],
+            )
+        finally:
+            cur.close()
+
+    def update_position_pnl(self, pos_id: int, pnl: float) -> None:
+        cur = self.cursor()
+        try:
+            cur.execute("UPDATE positions SET pnl=? WHERE id=?", [pnl, pos_id])
         finally:
             cur.close()
 
