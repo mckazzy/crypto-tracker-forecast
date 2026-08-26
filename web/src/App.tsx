@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import Leaderboard from './components/Leaderboard'
+import Trading from './components/Trading'
 import {
   fetchKlines,
   fetchSymbols,
@@ -37,7 +38,7 @@ function CandleChart({ candles }: { candles: Kline[] }) {
 }
 
 function App() {
-  const [tab, setTab] = useState<'dashboard' | 'leaderboard'>('dashboard')
+  const [tab, setTab] = useState<'dashboard' | 'leaderboard' | 'trading'>('dashboard')
   const [symbols, setSymbols] = useState<SymbolCoverage[]>([])
   const [symbol, setSymbol] = useState('BTCUSDT')
   const [timeframe, setTimeframe] = useState('1h')
@@ -94,6 +95,18 @@ function App() {
           >
             Leaderboard
           </button>
+          <button
+            role="tab"
+            aria-selected={tab === 'trading'}
+            onClick={() => setTab('trading')}
+            className={`px-3 py-1 rounded ${
+              tab === 'trading'
+                ? 'bg-emerald-600 text-white'
+                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            Trading
+          </button>
         </nav>
         {tab === 'dashboard' && (
           <>
@@ -133,6 +146,8 @@ function App() {
 
       {tab === 'leaderboard' ? (
         <Leaderboard />
+      ) : tab === 'trading' ? (
+        <Trading />
       ) : (
         <>
       {error && (
