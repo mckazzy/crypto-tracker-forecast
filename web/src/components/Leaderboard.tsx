@@ -79,6 +79,7 @@ function Leaderboard() {
           <thead>
             <tr className="bg-slate-800 text-left text-slate-300">
               <th className="p-2">Provider</th>
+              <th className="p-2">Type</th>
               <th className="p-2">Signals</th>
               <th className="p-2">OK</th>
               <th className="p-2">Token cost</th>
@@ -88,6 +89,7 @@ function Leaderboard() {
             {rows.map((r) => (
               <tr key={r.name} data-testid="leaderboard-row" className="border-t border-slate-800">
                 <td className="p-2">{r.name}</td>
+                <td className="p-2 text-slate-400">{r.model_type ?? '—'}</td>
                 <td className="p-2 tabular-nums">{r.signals}</td>
                 <td className="p-2 tabular-nums">{r.ok_signals}</td>
                 <td className="p-2 tabular-nums">

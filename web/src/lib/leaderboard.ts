@@ -3,6 +3,8 @@ export interface LeaderboardEntry {
   signals: number
   ok_signals: number
   total_token_cost: number
+  model_type?: string
+  brier?: number
 }
 
 export interface LeaderboardResponse {

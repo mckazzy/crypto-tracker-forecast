@@ -75,7 +75,7 @@ async def leaderboard(
     symbol: str | None = Query(None),
     timeframe: str | None = Query(None),
 ) -> dict:
-    """Xếp hạng provider theo số signal + token cost (từ forecasts table)."""
+    """Xếp hạng provider: merge forecasts table + model registry meta (type, brier)."""
     store = _store()
     rows = store.get_forecasts(symbol=symbol.upper() if symbol else None,
                                timeframe=timeframe.lower() if timeframe else None,
@@ -90,8 +90,28 @@ async def leaderboard(
         if r["status"] == "ok":
             entry["ok_signals"] += 1
         entry["total_token_cost"] += int(r["token_cost"] or 0)
+
+    # merge model registry meta (type/brier) vào provider entries
+    from app.models.registry import model_registry
+
+    for entry in by_provider.values():
+        meta = _registry_meta(entry["name"])
+        if meta:
+            entry["model_type"] = meta.get("type", "unknown")
+            entry["brier"] = meta.get("brier")
+
     providers = sorted(
         by_provider.values(),
         key=lambda p: (-p["total_token_cost"], -p["signals"]),
     )
     return {"symbol": symbol, "timeframe": timeframe, "providers": providers}
+
+
+def _registry_meta(model_name: str) -> dict | None:
+    from app.models.registry import model_registry
+
+    try:
+        _, meta = model_registry.load_model(model_name)
+        return meta
+    except Exception:
+        return None
