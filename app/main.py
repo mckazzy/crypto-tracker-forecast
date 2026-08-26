@@ -11,6 +11,10 @@ from app.config import settings
 async def lifespan(app: FastAPI):
     ws_task = None
     if not getattr(app.state, "ws_worker_disabled", False):
+        from app.forecast.registry import register_defaults
+
+        register_defaults()
+
         from app.ingest.ws_worker import run_ws_worker
 
         ws_task = asyncio.create_task(run_ws_worker())

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 from app.forecast.provider import ForecastProvider
 
@@ -67,3 +67,11 @@ class ProviderRegistry:
 
 
 registry = ProviderRegistry()
+
+
+def register_defaults() -> None:
+    """Đăng ký baselines mặc định (gọi lúc startup)."""
+    from app.forecast.baselines import EwmaVolProvider, RandomWalkProvider
+
+    registry.register(RandomWalkProvider())
+    registry.register(EwmaVolProvider())
