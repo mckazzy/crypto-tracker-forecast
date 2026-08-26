@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import Leaderboard from './components/Leaderboard'
 import {
   fetchKlines,
   fetchSymbols,
@@ -36,6 +37,7 @@ function CandleChart({ candles }: { candles: Kline[] }) {
 }
 
 function App() {
+  const [tab, setTab] = useState<'dashboard' | 'leaderboard'>('dashboard')
   const [symbols, setSymbols] = useState<SymbolCoverage[]>([])
   const [symbol, setSymbol] = useState('BTCUSDT')
   const [timeframe, setTimeframe] = useState('1h')
@@ -67,6 +69,34 @@ function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
       <header className="flex flex-wrap items-center gap-3 mb-6">
         <h1 className="text-2xl font-bold mr-4">Crypto Tracker</h1>
+        <nav role="tablist" aria-label="View" className="flex gap-1 mr-4">
+          <button
+            role="tab"
+            aria-selected={tab === 'dashboard'}
+            onClick={() => setTab('dashboard')}
+            className={`px-3 py-1 rounded ${
+              tab === 'dashboard'
+                ? 'bg-emerald-600 text-white'
+                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            Dashboard
+          </button>
+          <button
+            role="tab"
+            aria-selected={tab === 'leaderboard'}
+            onClick={() => setTab('leaderboard')}
+            className={`px-3 py-1 rounded ${
+              tab === 'leaderboard'
+                ? 'bg-emerald-600 text-white'
+                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            Leaderboard
+          </button>
+        </nav>
+        {tab === 'dashboard' && (
+          <>
         <label className="flex items-center gap-2">
           <span className="text-slate-400">Symbol</span>
           <select
@@ -97,8 +127,14 @@ function App() {
             </button>
           ))}
         </div>
+        </>
+        )}
       </header>
 
+      {tab === 'leaderboard' ? (
+        <Leaderboard />
+      ) : (
+        <>
       {error && (
         <div role="alert" className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded text-red-200">
           Load failed: {error}
@@ -154,6 +190,8 @@ function App() {
           </tbody>
         </table>
       </section>
+      </>
+      )}
     </div>
   )
 }
