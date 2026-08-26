@@ -41,6 +41,10 @@ from app.api.alert_routes import router as alert_router  # noqa: E402
 
 app.include_router(alert_router)
 
+from app.api.outcome_routes import router as outcome_router  # noqa: E402
+
+app.include_router(outcome_router)
+
 from app.forecast.routes import leaderboard_router, router as forecast_router  # noqa: E402
 
 app.include_router(forecast_router)

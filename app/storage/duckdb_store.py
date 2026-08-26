@@ -458,6 +458,60 @@ class DuckDBStore:
         finally:
             cur.close()
 
+    # ---- Feedback loop (SP4) ----
+
+    def save_outcome(self, outcome: dict) -> int:
+        cur = self.cursor()
+        try:
+            cur.execute(
+                "INSERT INTO signal_outcomes (signal_id, symbol, timeframe, model, direction, entry, tp, sl, outcome, user_override, source) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                [
+                    outcome.get("signal_id"),
+                    outcome["symbol"],
+                    outcome["timeframe"],
+                    outcome.get("model"),
+                    outcome["direction"],
+                    outcome.get("entry"),
+                    outcome.get("tp"),
+                    outcome.get("sl"),
+                    outcome["outcome"],
+                    outcome.get("user_override", False),
+                    outcome.get("source", "auto"),
+                ],
+            )
+            return int(cur.fetchone()[0])
+        finally:
+            cur.close()
+
+    def get_outcomes(self, limit: int = 500) -> list[dict]:
+        cur = self.cursor()
+        try:
+            rows = cur.execute(
+                "SELECT id, signal_id, symbol, timeframe, model, direction, entry, tp, sl, outcome, user_override, resolved_at, source "
+                "FROM signal_outcomes ORDER BY resolved_at DESC LIMIT ?",
+                [limit],
+            ).fetchall()
+            return [
+                {
+                    "id": r[0], "signal_id": r[1], "symbol": r[2], "timeframe": r[3],
+                    "model": r[4], "direction": r[5], "entry": r[6], "tp": r[7], "sl": r[8],
+                    "outcome": r[9], "user_override": r[10],
+                    "resolved_at": _ensure_utc(r[11]).isoformat() if r[11] else None,
+                    "source": r[12],
+                }
+                for r in rows
+            ]
+        finally:
+            cur.close()
+
+    def count_outcomes(self) -> int:
+        cur = self.cursor()
+        try:
+            return int(cur.execute("SELECT count(*) FROM signal_outcomes").fetchone()[0])
+        finally:
+            cur.close()
+
 
 def _ensure_utc(dt: datetime) -> datetime:
     """Naive datetimes are interpreted as UTC by convention (host may be UTC+7)."""
