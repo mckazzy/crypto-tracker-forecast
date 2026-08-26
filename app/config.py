@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     ai_model: str = ""
     ai_daily_token_budget: int = 200_000
 
+    # Alerts (SP4)
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    feedback_min_signals: int = 10
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

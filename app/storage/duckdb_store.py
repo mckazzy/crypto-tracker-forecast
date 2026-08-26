@@ -414,6 +414,50 @@ class DuckDBStore:
         finally:
             cur.close()
 
+    # ---- Alerts (SP4) ----
+
+    def save_alert(self, alert: dict) -> int:
+        cur = self.cursor()
+        try:
+            cur.execute(
+                "INSERT INTO alerts (symbol, timeframe, direction, entry, tp, sl, model, channel, status) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                [
+                    alert["symbol"],
+                    alert["timeframe"],
+                    alert["direction"],
+                    alert.get("entry"),
+                    alert.get("tp"),
+                    alert.get("sl"),
+                    alert.get("model"),
+                    alert["channel"],
+                    alert["status"],
+                ],
+            )
+            return int(cur.fetchone()[0])
+        finally:
+            cur.close()
+
+    def get_alerts(self, limit: int = 100) -> list[dict]:
+        cur = self.cursor()
+        try:
+            rows = cur.execute(
+                "SELECT id, symbol, timeframe, direction, entry, tp, sl, model, sent_at, channel, status "
+                "FROM alerts ORDER BY sent_at DESC LIMIT ?",
+                [limit],
+            ).fetchall()
+            return [
+                {
+                    "id": r[0], "symbol": r[1], "timeframe": r[2], "direction": r[3],
+                    "entry": r[4], "tp": r[5], "sl": r[6], "model": r[7],
+                    "sent_at": _ensure_utc(r[8]).isoformat() if r[8] else None,
+                    "channel": r[9], "status": r[10],
+                }
+                for r in rows
+            ]
+        finally:
+            cur.close()
+
 
 def _ensure_utc(dt: datetime) -> datetime:
     """Naive datetimes are interpreted as UTC by convention (host may be UTC+7)."""
