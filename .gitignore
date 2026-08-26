@@ -10,3 +10,4 @@ data/rejects/
 .env
 node_modules/
 web/dist/
+models/
