@@ -55,7 +55,13 @@ async def get_forecast(
         try:
             signal = prov.forecast(ctx)
             registry.record_success(prov.name)
-            return signal.model_dump(mode="json")
+            payload = signal.model_dump(mode="json")
+            # cache mọi kết quả (kể cả failed) vào forecasts table
+            try:
+                store.save_forecast(symbol_u, tf, prov.name, payload)
+            except Exception:
+                logger.exception("failed to cache forecast")
+            return payload
         except Exception as e:
             logger.warning("provider %s failed: %s", prov.name, e)
             registry.record_error(prov.name, str(e))

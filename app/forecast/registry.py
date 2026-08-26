@@ -4,6 +4,7 @@ import logging
 import threading
 from datetime import UTC, datetime
 
+from app.config import settings
 from app.forecast.provider import ForecastProvider
 
 logger = logging.getLogger(__name__)
@@ -70,8 +71,14 @@ registry = ProviderRegistry()
 
 
 def register_defaults() -> None:
-    """Đăng ký baselines mặc định (gọi lúc startup)."""
+    """Đăng ký baselines mặc định + AI provider (nếu enabled) — gọi lúc startup."""
     from app.forecast.baselines import EwmaVolProvider, RandomWalkProvider
 
     registry.register(RandomWalkProvider())
     registry.register(EwmaVolProvider())
+
+    if settings.ai_enabled:
+        from app.forecast.ai_provider import AIProvider
+
+        registry.register(AIProvider())
+        logger.info("AI provider registered (model=%s)", settings.ai_model)

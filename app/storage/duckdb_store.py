@@ -31,6 +31,15 @@ CREATE TABLE IF NOT EXISTS backfill_progress (
     updated_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (symbol, timeframe)
 );
+CREATE TABLE IF NOT EXISTS forecasts (
+    symbol VARCHAR NOT NULL,
+    timeframe VARCHAR NOT NULL,
+    provider VARCHAR NOT NULL,
+    signal_json VARCHAR NOT NULL,
+    status VARCHAR NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    token_cost BIGINT NOT NULL DEFAULT 0
+);
 """
 
 REQUIRED_FIELDS = (
@@ -233,6 +242,62 @@ class DuckDBStore:
                 [symbol, timeframe],
             ).fetchone()
             return _ensure_utc(row[0]) if row and row[0] else None
+        finally:
+            cur.close()
+
+    def save_forecast(self, symbol: str, timeframe: str, provider: str, signal: dict) -> None:
+        """Persist a forecast signal snapshot (JSON) to the forecasts table."""
+        import json as _json
+
+        cur = self.cursor()
+        try:
+            cur.execute(
+                "INSERT INTO forecasts (symbol, timeframe, provider, signal_json, status, token_cost) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                [
+                    symbol,
+                    timeframe,
+                    provider,
+                    _json.dumps(signal, default=str),
+                    signal.get("status", "ok"),
+                    int(signal.get("token_cost", 0)),
+                ],
+            )
+        finally:
+            cur.close()
+
+    def get_forecasts(self, symbol: str | None = None, timeframe: str | None = None, limit: int = 100) -> list[dict]:
+        """Latest forecasts, newest first, optional filters."""
+        import json as _json
+
+        sql = "SELECT symbol, timeframe, provider, signal_json, status, created_at, token_cost FROM forecasts"
+        params: list = []
+        conds = []
+        if symbol:
+            conds.append("symbol = ?")
+            params.append(symbol)
+        if timeframe:
+            conds.append("timeframe = ?")
+            params.append(timeframe)
+        if conds:
+            sql += " WHERE " + " AND ".join(conds)
+        sql += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        cur = self.cursor()
+        try:
+            rows = cur.execute(sql, params).fetchall()
+            return [
+                {
+                    "symbol": r[0],
+                    "timeframe": r[1],
+                    "provider": r[2],
+                    "signal": _json.loads(r[3]),
+                    "status": r[4],
+                    "created_at": _ensure_utc(r[5]).isoformat() if r[5] else None,
+                    "token_cost": r[6],
+                }
+                for r in rows
+            ]
         finally:
             cur.close()
 

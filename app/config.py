@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     symbols: str = "BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT"
     timeframes: str = "5m,15m,1h,4h,1d,1w"
 
+    # AI provider (SP2 Phase 4)
+    ai_enabled: bool = False
+    ai_base_url: str = "http://localhost:20128/v1"
+    ai_api_key: str = ""
+    ai_model: str = ""
+    ai_daily_token_budget: int = 200_000
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
