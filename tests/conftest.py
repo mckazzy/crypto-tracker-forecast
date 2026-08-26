@@ -42,3 +42,29 @@ def tmp_duckdb(tmp_path):
     conn.execute("SET TimeZone='UTC'")
     yield conn
     conn.close()
+
+
+@pytest.fixture
+def client(tmp_duckdb, monkeypatch):
+    """TestClient with API store pointed at tmp DuckDB and ws worker disabled."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.storage.duckdb_store import DuckDBStore
+
+    store = DuckDBStore(tmp_duckdb)
+    monkeypatch.setattr("app.api.routes.get_store", lambda: store)
+
+    app.state.ws_worker_disabled = True
+    with TestClient(app) as c:
+        yield c
+
+
+@pytest.fixture(autouse=True)
+def _clean_registry():
+    """Reset global forecast registry before each test (avoid state leak)."""
+    from app.forecast.registry import registry
+
+    registry._entries.clear()
+    yield
+    registry._entries.clear()
