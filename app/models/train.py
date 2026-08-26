@@ -69,3 +69,12 @@ def _save(symbol: str, timeframe: str, model_kind: str, model, features: list | 
     model_registry.save_model(name, model, meta)
     logger.info("saved %s", name)
     return name
+
+
+def retrain_from_feedback(symbol: str, timeframe: str, model_kind: str = "intraday_lgbm") -> str | None:
+    """CLI hook: retrain model từ feedback outcomes (SP4 Phase 5)."""
+    from app.api.routes import get_store
+    from app.trading.retrain import retrain_from_outcomes
+
+    store = get_store()
+    return retrain_from_outcomes(store, symbol, timeframe, model_kind)

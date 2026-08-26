@@ -1,6 +1,6 @@
-# Crypto Tracker & Forecast — SP1 Data Foundation
+# Crypto Tracker & Forecast
 
-Single-process FastAPI app: WebSocket ingest worker chạy như asyncio task trong cùng process, dùng chung 1 DuckDB instance.
+Single-process FastAPI app: WebSocket ingest worker chạy như asyncio task trong cùng process, dùng chung 1 DuckDB instance. SP1 (data foundation) + SP2 (forecast core) + SP3 (model zoo) + SP4 (alerts + paper trading + feedback).
 
 ## Architecture spike (Phase 1)
 
@@ -45,4 +45,39 @@ REM hoặc:
 .venv\Scripts\python.exe -m app.ingest backfill --symbol BTCUSDT --timeframes 5m,15m,1h,4h,1d,1w --days 365
 ```
 
-Xem thêm: plan SP1 tại vault `2nd-brain-monkeys/Plans/260825-1638-sp1-data-foundation-crypto-tracker-forecast/`.
+## Forecast & Models
+
+```
+# Train model (SP3 model zoo: intraday_lgbm / meta_lgbm / elasticnet)
+.venv\Scripts\python.exe -m app.models train --symbol BTCUSDT --timeframes 1h,4h --model intraday_lgbm
+
+# Eval walk-forward vs baseline
+.venv\Scripts\python.exe -m app.models eval --symbol BTCUSDT --timeframes 1h,4h
+
+# Retrain từ feedback outcomes (SP4)
+.venv\Scripts\python.exe -m app.models retrain --symbol BTCUSDT --timeframes 1h,4h
+```
+
+## Alerts (SP4)
+
+Cấu hình `.env`:
+```
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
+FEEDBACK_MIN_SIGNALS=10
+```
+
+- `POST /api/alerts` — dispatch alert (telegram nếu cấu hình, fallback webhook)
+- `GET /api/alerts` — lịch sử alerts
+- `POST /api/outcomes` — user nhập win/lose (guard: cần ≥ FEEDBACK_MIN_SIGNALS track record)
+- `POST /api/outcomes/auto-resolve` — auto-resolve từ klines (TP→win, SL→lose)
+- `GET/POST /api/positions` + `POST /api/positions/{id}/close` + `GET /api/positions/pnl` — paper trading
+
+## Test
+
+```
+.venv\Scripts\python.exe -m pytest
+cd web && npm run test && npm run build
+```
+
+Xem thêm: plans tại vault `2nd-brain-monkeys/Plans/2608*-*-*-crypto-tracker-forecast/` (SP1 data foundation, SP2 forecast core, SP3 model zoo, SP4 alerts + paper trading + feedback).

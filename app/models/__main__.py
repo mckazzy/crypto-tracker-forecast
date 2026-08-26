@@ -20,6 +20,11 @@ def main() -> int:
     ev.add_argument("--symbol", required=True)
     ev.add_argument("--timeframes", default="1h,4h")
 
+    rt = sub.add_parser("retrain", help="Retrain model từ feedback outcomes")
+    rt.add_argument("--symbol", required=True)
+    rt.add_argument("--timeframes", default="1h,4h")
+    rt.add_argument("--model", default="intraday_lgbm")
+
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
@@ -35,6 +40,12 @@ def main() -> int:
         for tf in [t.strip() for t in args.timeframes.split(",")]:
             report = eval_symbol(args.symbol.upper(), tf)
             print(f"{args.symbol.upper()} {tf}: acc={report['accuracy']:.3f} brier={report['brier']:.3f} n={report['n']}")
+    elif args.cmd == "retrain":
+        from app.models.train import retrain_from_feedback
+
+        for tf in [t.strip() for t in args.timeframes.split(",")]:
+            name = retrain_from_feedback(args.symbol.upper(), tf, args.model)
+            print(f"retrained: {name}" if name else f"kept old (challenger not better): {args.symbol.upper()} {tf}")
     return 0
 
 
