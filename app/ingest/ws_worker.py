@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import websockets
 
 from app.config import settings
+from app.connectors.binance_rest import MS_PER_UNIT
 from app.storage.duckdb_store import DuckDBStore
 
 logger = logging.getLogger(__name__)

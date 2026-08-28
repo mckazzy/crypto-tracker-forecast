@@ -1,1 +1,193 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
+
+:root {
+  /* Option 1: Clean Quartz / Modern Pro Terminal (TradingView & Linear Aesthetic) */
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bfdbfe;
+  --color-brand-300: #93c5fd;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #2563eb;
+  --color-brand-600: #1d4ed8;
+  --color-brand-700: #1e40af;
+  --color-brand-800: #1e3a8a;
+  --color-brand-900: #172554;
+
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+
+  /* Light Theme - Clean Quartz & Pure Slate */
+  --color-bg: #f8fafc;
+  --color-bg-alt: #f1f5f9;
+  --color-surface: #ffffff;
+  --color-surface-2: #f1f5f9;
+  --color-surface-3: #e2e8f0;
+  --color-sidebar: rgba(248, 250, 252, 0.92);
+  --color-border: #e2e8f0;
+  --color-border-subtle: #f1f5f9;
+
+  --color-text: #0f172a;
+  --color-text-main: #0f172a;
+  --color-text-muted: #475569;
+  --color-text-subtle: #64748b;
+
+  --color-danger: #dc2626;
+  --color-danger-bg: rgba(220, 38, 38, 0.08);
+  --color-success: #059669;
+  --color-success-bg: rgba(5, 150, 105, 0.08);
+  --color-warning: #d97706;
+  --color-warning-bg: rgba(217, 119, 6, 0.08);
+  --color-info: #0284c7;
+  --color-info-bg: rgba(2, 132, 199, 0.08);
+
+  --radius-brand: 10px;
+  --radius-brand-lg: 14px;
+
+  --shadow-soft: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-warm: 0 4px 14px -2px rgba(37, 99, 235, 0.25);
+  --shadow-elevated: 0 12px 28px -4px rgba(15, 23, 42, 0.08);
+  --shadow-elev: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.06);
+
+  color-scheme: light;
+}
+
+.dark {
+  /* Dark Theme - Modern Obsidian Slate & Electric Blue */
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bfdbfe;
+  --color-brand-300: #93c5fd;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-brand-800: #1e40af;
+  --color-brand-900: #1e3a8a;
+
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+
+  --color-bg: #090d16;
+  --color-bg-alt: #0f172a;
+  --color-surface: #111827;
+  --color-surface-2: #1e293b;
+  --color-surface-3: #334155;
+  --color-sidebar: rgba(15, 23, 42, 0.92);
+  --color-border: #1e293b;
+  --color-border-subtle: #111827;
+
+  --color-text: #f8fafc;
+  --color-text-main: #f8fafc;
+  --color-text-muted: #94a3b8;
+  --color-text-subtle: #64748b;
+
+  --color-danger: #f43f5e;
+  --color-danger-bg: rgba(244, 63, 94, 0.12);
+  --color-success: #10b981;
+  --color-success-bg: rgba(16, 185, 129, 0.12);
+  --color-warning: #fbbf24;
+  --color-warning-bg: rgba(251, 191, 36, 0.12);
+  --color-info: #38bdf8;
+  --color-info-bg: rgba(56, 189, 248, 0.12);
+
+  --shadow-soft: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+  --shadow-warm: 0 4px 14px -2px rgba(59, 130, 246, 0.35);
+  --shadow-elevated: 0 12px 28px -4px rgba(0, 0, 0, 0.5);
+  --shadow-elev: inset 0 1px 0 0 rgba(255, 255, 255, 0.05), 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, sans-serif;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    overflow-x: hidden;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  /* Custom adaptive scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-bg);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-surface-3);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-primary);
+  }
+}
+
+/* UI Component Utilities */
+.app-bg {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+.surface-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-brand-lg);
+  box-shadow: var(--shadow-elev);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.surface-card:hover {
+  border-color: var(--color-brand-400);
+}
+
+.surface-card-subtle {
+  background-color: var(--color-surface-2);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-brand);
+}
+
+.glass-header {
+  background-color: var(--color-sidebar);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.text-mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.brand-btn-primary {
+  background-color: var(--color-primary);
+  color: #ffffff;
+  box-shadow: var(--shadow-warm);
+  transition: all 0.15s ease;
+}
+
+.brand-btn-primary:hover {
+  background-color: var(--color-primary-hover);
+  transform: translateY(-0.5px);
+}
+
+.brand-pill-active {
+  background-color: var(--color-primary);
+  color: #ffffff;
+  box-shadow: var(--shadow-warm);
+}
+
+.brand-pill-inactive {
+  color: var(--color-text-muted);
+  background-color: transparent;
+}
+
+.brand-pill-inactive:hover {
+  color: var(--color-text-main);
+  background-color: var(--color-surface-2);
+}

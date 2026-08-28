@@ -3,7 +3,6 @@ import os
 from functools import lru_cache
 from datetime import UTC, datetime
 
-import duckdb
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
@@ -18,8 +17,18 @@ router = APIRouter(prefix="/api")
 
 @lru_cache(maxsize=1)
 def get_store() -> DuckDBStore:
+    import duckdb as _duckdb
+
     os.makedirs(settings.data_dir, exist_ok=True)
-    conn = duckdb.connect(settings.db_path)
+    try:
+        conn = _duckdb.connect(settings.db_path)
+    except Exception:
+        # WAL corrupt (crash không graceful) → xóa WAL, data chính vẫn trong .duckdb
+        logger.warning("DuckDB open failed — removing stale WAL and retrying")
+        wal = settings.db_path + ".wal"
+        if os.path.exists(wal):
+            os.remove(wal)
+        conn = _duckdb.connect(settings.db_path)
     reject_path = os.path.join(settings.data_dir, "rejects", "klines-reject.log")
     return DuckDBStore(conn, reject_log_path=reject_path)
 

@@ -61,3 +61,15 @@ class ForecastContext:
     candles: list[dict] = field(default_factory=list)
     indicators: dict = field(default_factory=dict)
     as_of: datetime | None = None
+
+
+class UserForecastInput(BaseModel):
+    """Payload từ UI khi người dùng tự tạo dự đoán của mình."""
+
+    symbol: str
+    timeframe: str
+    direction: SignalDirection
+    entry: float | None = None
+    take_profit: list[float] = Field(default_factory=list)
+    stop_loss: float | None = None
+    probability: float = Field(default=1.0, ge=0.0, le=1.0)

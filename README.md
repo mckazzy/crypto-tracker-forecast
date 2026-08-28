@@ -67,6 +67,21 @@ TELEGRAM_CHAT_ID=...
 FEEDBACK_MIN_SIGNALS=10
 ```
 
+## AI Provider (OpenRouter)
+
+Cấu hình `.env`:
+```
+AI_ENABLED=true
+AI_BASE_URL=https://openrouter.ai/api/v1
+AI_API_KEY=sk-or-...          # key từ https://openrouter.ai/keys
+AI_MODEL=deepseek/deepseek-v4-flash-0731
+AI_MODEL_CHOICES=deepseek/deepseek-v4-flash-0731,openai/gpt-4o-mini,...
+```
+
+- `GET /api/ai/models` — danh sách model curated (whitelist) hiển thị trên front-end
+- Front-end có Model picker ở tab Leaderboard, chọn model để chạy forecast/leaderboard
+- AI = challenger trên leaderboard (thêm cột token cost)
+
 - `POST /api/alerts` — dispatch alert (telegram nếu cấu hình, fallback webhook)
 - `GET /api/alerts` — lịch sử alerts
 - `POST /api/outcomes` — user nhập win/lose (guard: cần ≥ FEEDBACK_MIN_SIGNALS track record)

@@ -97,6 +97,39 @@ class BinanceRestClient:
             cursor = next_cursor
         return out
 
+    def get_ticker_price(self, symbol: str) -> float | None:
+        """Lấy giá realtime hiện tại của symbol từ Binance."""
+        try:
+            resp = self._client.get("/api/v3/ticker/price", params={"symbol": symbol.upper()})
+            if resp.status_code == 200:
+                return float(resp.json()["price"])
+        except Exception as e:
+            logger.warning("failed to fetch realtime ticker for %s: %s", symbol, e)
+        return None
+
+    def fetch_recent_klines(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_ms: int | None = None,
+        end_ms: int | None = None,
+        limit: int = 10,
+    ) -> list[dict]:
+        """Lấy danh sách nến gần nhất (kể cả nến đang mở) từ Binance."""
+        params: dict = {"symbol": symbol.upper(), "interval": timeframe, "limit": limit}
+        if start_ms is not None:
+            params["startTime"] = start_ms
+        if end_ms is not None:
+            params["endTime"] = end_ms
+        try:
+            resp = self._client.get("/api/v3/klines", params=params)
+            if resp.status_code == 200:
+                rows = resp.json()
+                return [_normalize(symbol.upper(), timeframe, raw) for raw in rows]
+        except Exception as e:
+            logger.warning("failed to fetch recent klines from Binance: %s", e)
+        return []
+
 
 def _normalize(symbol: str, timeframe: str, raw: list) -> dict:
     from datetime import UTC, datetime

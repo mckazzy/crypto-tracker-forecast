@@ -56,6 +56,7 @@ def client(tmp_duckdb, monkeypatch):
     monkeypatch.setattr("app.api.routes.get_store", lambda: store)
 
     app.state.ws_worker_disabled = True
+    app.state.futures_disabled = True
     with TestClient(app) as c:
         yield c
 

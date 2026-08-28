@@ -116,3 +116,27 @@ class TestBackfillProgress:
         later = t0 + timedelta(hours=7)
         store.set_backfill_cursor("BTCUSDT", "1h", later)
         assert store.get_backfill_cursor("BTCUSDT", "1h") == later
+
+
+class TestGetKlinesLatestWindow:
+    def test_no_start_returns_newest(self, store):
+        """Không có start → limit candles MỚI NHẤT (không phải cũ nhất)."""
+        t0 = datetime(2026, 1, 1, tzinfo=UTC)
+        n = 50
+        store.upsert_klines([kline(t0 + timedelta(hours=i)) for i in range(n)])
+        rows = store.get_klines("BTCUSDT", "1h", limit=10)
+        assert len(rows) == 10
+        # candle cuối = mới nhất (t0 + 49h)
+        assert rows[-1]["open_time"].replace(tzinfo=UTC) == t0 + timedelta(hours=49)
+        # candle đầu = t0 + 40h
+        assert rows[0]["open_time"].replace(tzinfo=UTC) == t0 + timedelta(hours=40)
+        # thứ tự tăng dần
+        times = [r["open_time"].replace(tzinfo=UTC) for r in rows]
+        assert times == sorted(times)
+
+    def test_with_start_returns_from_start(self, store):
+        t0 = datetime(2026, 1, 1, tzinfo=UTC)
+        store.upsert_klines([kline(t0 + timedelta(hours=i)) for i in range(20)])
+        rows = store.get_klines("BTCUSDT", "1h", start=t0 + timedelta(hours=10), limit=5)
+        assert len(rows) == 5
+        assert rows[0]["open_time"].replace(tzinfo=UTC) == t0 + timedelta(hours=10)

@@ -11,3 +11,6 @@ data/rejects/
 node_modules/
 web/dist/
 models/
+.agentkit/
+.commandcode/
+.kilo/

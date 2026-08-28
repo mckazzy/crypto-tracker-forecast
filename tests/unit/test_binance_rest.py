@@ -133,3 +133,28 @@ def test_pagination_boundary_overlap(client_factory):
     out = client.fetch_klines("BTCUSDT", "1h", start_ms=1_760_000_000_000)
     times = [k["open_time"].timestamp() * 1000 for k in out]
     assert len(times) == len(set(times))  # no duplicates
+
+
+def test_get_ticker_price():
+    def _handler(request: httpx.Request) -> httpx.Response:
+        if "/api/v3/ticker/price" in request.url.path:
+            return httpx.Response(200, json={"symbol": "BTCUSDT", "price": "68540.25"})
+        return httpx.Response(404, json={})
+
+    client = BinanceRestClient(transport=httpx.MockTransport(_handler))
+    price = client.get_ticker_price("BTCUSDT")
+    assert price == 68540.25
+
+
+def test_fetch_recent_klines():
+    row = make_kline_row(1_760_000_000_000, closed=False)
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        if "/api/v3/klines" in request.url.path:
+            return httpx.Response(200, json=[row])
+        return httpx.Response(404, json={})
+
+    client = BinanceRestClient(transport=httpx.MockTransport(_handler))
+    klines = client.fetch_recent_klines("BTCUSDT", "1h", limit=5)
+    assert len(klines) == 1
+    assert klines[0]["close"] == 40050.0

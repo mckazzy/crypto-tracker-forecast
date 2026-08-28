@@ -85,18 +85,19 @@ def train_intraday(
     symbol: str,
     timeframe: str,
     candles: list[dict],
+    sample_weight: np.ndarray | None = None,
     registry=None,
 ) -> str:
-    """Train LightGBM + Isotonic calibration, save to registry."""
+    """Train LightGBM + Isotonic calibration, save to registry with optional sample_weight."""
     import pandas as pd
     from lightgbm import LGBMClassifier
     from sklearn.calibration import IsotonicRegression
-    from sklearn.model_selection import cross_val_predict
+    from sklearn.model_selection import KFold
 
     reg = registry or model_registry
     df = pd.DataFrame(candles)
     feats = _feature_df(df)
-    if len(feats) < 40:
+    if len(feats) < 15:
         raise ValueError("not enough candles for intraday training")
 
     X = feats[FEATURE_COLS].to_numpy()
@@ -104,18 +105,43 @@ def train_intraday(
     # drop last row (NaN label)
     valid = ~np.isnan(y)
     X, y = X[valid], y[valid]
-    if len(y) < 30:
+    if len(y) < 12:
         raise ValueError("too few labeled samples")
 
+    sw = None
+    if sample_weight is not None:
+        sw = np.asarray(sample_weight, dtype=float)
+        if len(sw) == len(valid):
+            sw = sw[valid]
+        elif len(sw) != len(y):
+            sw = None
+
+    n = len(y)
+    # data ít → giảm cv folds + cây để tránh overfit và lỗi split
+    cv = min(5, n // 10) if n >= 30 else 2
+    cv = max(2, cv)
+    n_est = 100 if n >= 100 else 50
+
     clf = LGBMClassifier(
-        n_estimators=100, learning_rate=0.05, max_depth=4, subsample=0.8,
+        n_estimators=n_est, learning_rate=0.05, max_depth=4, subsample=0.8,
         verbose=-1, random_state=42,
     )
-    # OOF probabilities for calibration
-    oof = cross_val_predict(clf, X, y, cv=5, method="predict_proba", n_jobs=1)[:, 1]
+    # OOF probabilities with sample weights for calibration
+    kf = KFold(n_splits=cv, shuffle=True, random_state=42)
+    oof = np.zeros(n)
+    for train_idx, val_idx in kf.split(X, y):
+        fold_clf = LGBMClassifier(
+            n_estimators=n_est, learning_rate=0.05, max_depth=4, subsample=0.8,
+            verbose=-1, random_state=42,
+        )
+        fold_sw = sw[train_idx] if sw is not None else None
+        fold_clf.fit(X[train_idx], y[train_idx], sample_weight=fold_sw)
+        proba = fold_clf.predict_proba(X[val_idx])
+        oof[val_idx] = proba[:, 1] if proba.shape[1] > 1 else proba[:, 0]
+
     iso = IsotonicRegression(out_of_bounds="clip")
-    iso.fit(oof, y)
-    clf.fit(X, y)
+    iso.fit(oof, y, sample_weight=sw)
+    clf.fit(X, y, sample_weight=sw)
 
     meta = {
         "type": "intraday_lgbm",
@@ -123,10 +149,11 @@ def train_intraday(
         "timeframe": timeframe,
         "trained_at": datetime.now(UTC).isoformat(),
         "features": FEATURE_COLS,
+        "has_sample_weights": sw is not None,
     }
     name = f"intraday_lgbm@{symbol}@{timeframe}"
     reg.save_model(name, {"clf": clf, "iso": iso}, meta)
-    logger.info("trained intraday %s %s", symbol, timeframe)
+    logger.info("trained intraday %s %s (sample_weighted=%s)", symbol, timeframe, sw is not None)
     return name
 
 
