@@ -65,3 +65,38 @@
 
 ## Unresolved Questions
 - Môi trường mạng hiện tại có chính sách chặn fstream chủ đích không (ISP/firewall)? Nếu chỉ mất tạm thời, fallback vẫn nên làm vì chi phí thấp.
+
+---
+
+## Post-fix Verification — 2026-08-29 follow-up session
+
+Toàn bộ blocker + 4 minor issues đã được fix và verify (commit `052274d`).
+
+### Trạng thái các issue
+
+| Issue | Status | Bằng chứng |
+|---|---|---|
+| [BLOCKER] fstream drop push frames | ✅ RESOLVED | Watchdog relay: WS im lặng >5s → poll REST `premiumIndex` mỗi 3s (base fapi riêng). Smoke live: markPrice inject tại [1.0s] (catch-up connect), [6.5s] (watchdog sau 5s im lặng), rồi mỗi ~3.5s — giá sống 77634.2 → 77644.8 dù fstream hoàn toàn im lặng |
+| Minor 1: client WS watchdog (mở nhưng im lặng) | ✅ RESOLVED | `connectTradeWs`: WS OPEN nhưng không có frame >10s → `poll()` (check mỗi 5s) |
+| Minor 2: act() warnings 3 test file | ✅ RESOLVED | vitest: 63 pass, **0 act warnings** |
+| Minor 3: a11y contrast badge LIVE | ✅ RESOLVED (code) | `text-emerald-600` → `text-emerald-700` (giữ `dark:text-emerald-400`); browser axe re-check chưa chạy lại |
+| Minor 4: `/api/klines` dồn dập (~40 req/30s) | ✅ RESOLVED | `fetchKlines`: dedupe in-flight + cache 10s/key; `force` cho manual refresh |
+
+### Test counts (sau fix)
+- **pytest: 339 passed** (332 baseline + 3 watchdog relay + 4 klines endpoint) — 0 fail
+- **vitest: 63 passed** — 0 fail, 0 act warnings
+- **Build: PASS** — 418.30 kB / gzip 122.22 kB (khớp baseline ~417/122)
+
+### Tính năng mới trong đợt fix
+- `GET /api/futures/klines/{symbol}` — public market data (không auth), fapi primary → spot fallback, mirror WS frame contract (`is_closed = close_time < now`). Smoke live: trả 5 nến 1m thật, nến đang mở `is_closed=false`.
+- Seed effect trong `FuturesTerminal` — chỉ seed khi chart rỗng, không đè data WS.
+- Settings mới: `binance_futures_rest_base` (fix luôn lỗi gọi `/fapi/v1/*` trên base spot), `binance_futures_ws_silence_timeout`, `binance_futures_rest_poll_interval`.
+
+### Ghi chú môi trường dev (quan trọng cho phiên sau)
+- DSH sandbox dịch `os.mkdir(mode=0o700)` (pytest tmp_path mặc định) thành ACL owner-only không truy cập được → mọi test dùng `tmp_path` fail (kể cả cleanup sessionfinish). Đã override fixture `tmp_path` trong `tests/conftest.py` (mode mặc định 0o777). Không cần `--basetemp` nữa.
+- vitest/build cần full-access sandbox (esbuild spawn subprocess bị chặn EPERM).
+- `.pytest_cache` bị khóa ACL từ phiên cũ → warning cacheprovider vô hại (đã gitignore).
+
+### Còn lại chưa verify
+- Browser UI smoke (axe re-check badge LIVE) — chưa chạy; Trading terminal giờ sẽ có mark price + chart ngay khi mở (watchdog + seed đã verify qua WS/REST live).
+- Coverage % vẫn chưa đo (không có flag `--cov` trong pytest.ini).
