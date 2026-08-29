@@ -1,24 +1,24 @@
 # Crypto Tracker & Forecast
 
-Single-process FastAPI app: WebSocket ingest worker chạy như asyncio task trong cùng process, dùng chung 1 DuckDB instance. SP1 (data foundation) + SP2 (forecast core) + SP3 (model zoo) + SP4 (alerts + paper trading + feedback).
+Single-process FastAPI app: WebSocket ingest worker chạy như asyncio task trong cùng process, dùng chung 1 DuckDB instance.
 
-## Architecture spike (Phase 1)
+**SP1** data foundation · **SP2** forecast core (AI OpenRouter + local LightGBM) · **SP3** model zoo + walk-forward eval · **SP4** alerts (Telegram) + paper trading + feedback loop · **SP5** futures demo exchange (Binance-style trade screen).
 
-`scripts/spike_single_process_duckdb.py` — 2 kết luận quan trọng:
+## Tính năng
 
-1. **Không thể mở cùng file DuckDB với config trộn lẫn** (read-write + `read_only=True`) ngay cả trong cùng process → app dùng đúng **1 connection read-write duy nhất**, chia sẻ qua nhiều cursor (thread-safe cho đọc song song).
-2. **`SET TimeZone='UTC'` không propagate xuống cursor** (host UTC+7 mặc định Asia/Saigon) → phải set TimeZone trên **mỗi cursor** khi tạo. Store layer áp dụng điều này ở Phase 2/4.
-
-Kết luận: topology single-process khả thi, không cần fallback Parquet. Red-team #1 tránh bằng cách không bao giờ mở DB từ process thứ hai.
-
-Chạy spike: `.venv\Scripts\python.exe scripts\spike_single_process_duckdb.py`
+- **Real-time klines** — Binance spot WS ingest vào DuckDB (6 timeframe: 5m → 1w), `/api/klines` đọc local DB.
+- **AI Forecast** — OpenRouter (deepseek/gpt/qwen…) vs local LightGBM (`intraday_lgbm`/`meta_lgbm`/`elasticnet`), 6 timeframe, walk-forward eval, feedback loop (win/lose + auto-resolve từ klines) + retrain pipeline.
+- **Alerts** — dispatch Telegram (nếu cấu hình) + webhook fallback, feed trong UI.
+- **Leaderboard** — so sánh AI vs local theo accuracy + token cost.
+- **Futures Demo Exchange (SP5)** — ví ảo 10,000 USDT, market/limit order, TP/SL, liquidation, positions + P&L realtime, chart kline + mark price qua WS relay. **Fallback tự động khi mạng chặn fstream push**: watchdog poll REST `premiumIndex` mỗi 3s khi WS im lặng >5s, seed chart từ `GET /api/futures/klines/{symbol}` (fapi primary, spot fallback).
 
 ## Setup
 
 ```
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
-copy .env.example .env
+copy .env.example .env            # bắt buộc: JWT_SECRET >= 32 chars
+cd web && npm install && cd ..
 ```
 
 ## Run
@@ -27,6 +27,7 @@ copy .env.example .env
 start.bat
 REM hoặc:
 .venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 9900
+cd web && npm run dev             # vite dev server :5173 (proxy /api + /ws)
 ```
 
 - Server bind **127.0.0.1 duy nhất** (không bao giờ 0.0.0.0)
@@ -36,7 +37,8 @@ REM hoặc:
 ## Test
 
 ```
-.venv\Scripts\python.exe -m pytest
+.venv\Scripts\python.exe -m pytest          # 339 passed
+cd web && npm run test && npm run build     # 63 passed + build OK
 ```
 
 ## Backfill historical data
@@ -75,24 +77,18 @@ AI_ENABLED=true
 AI_BASE_URL=https://openrouter.ai/api/v1
 AI_API_KEY=sk-or-...          # key từ https://openrouter.ai/keys
 AI_MODEL=deepseek/deepseek-v4-flash-0731
-AI_MODEL_CHOICES=deepseek/deepseek-v4-flash-0731,openai/gpt-4o-mini,...
 ```
 
-- `GET /api/ai/models` — danh sách model curated (whitelist) hiển thị trên front-end
-- Front-end có Model picker ở tab Leaderboard, chọn model để chạy forecast/leaderboard
-- AI = challenger trên leaderboard (thêm cột token cost)
+## Futures Demo Exchange (SP5)
 
-- `POST /api/alerts` — dispatch alert (telegram nếu cấu hình, fallback webhook)
-- `GET /api/alerts` — lịch sử alerts
-- `POST /api/outcomes` — user nhập win/lose (guard: cần ≥ FEEDBACK_MIN_SIGNALS track record)
-- `POST /api/outcomes/auto-resolve` — auto-resolve từ klines (TP→win, SL→lose)
-- `GET/POST /api/positions` + `POST /api/positions/{id}/close` + `GET /api/positions/pnl` — paper trading
+- `POST /api/futures/auth/register|login` → JWT (fail-closed, secret ≥ 32 chars)
+- `POST /api/futures/orders` — MARKET fill tại engine mark (server-authoritative, client price bị bỏ qua) / LIMIT chờ fill; TP/SL tùy chọn
+- `GET /api/futures/positions|orders|trades` + `POST /api/futures/positions/{id}/close` + `POST /api/futures/account/reset`
+- `GET /api/futures/mark/{symbol}` — mark price hiện tại (engine cache)
+- `GET /api/futures/klines/{symbol}?timeframe=1m&limit=200` — public market data, fapi primary + spot fallback
+- WS `ws://127.0.0.1:9900/ws/trade/{symbol}` — frame markPrice + kline (server-normalized, không cần auth)
+- Engine nhận tick độc lập client (0 client vẫn sống); relay watchdog poll REST khi WS im lặng >5s (mạng lọc fstream)
 
-## Test
+## Roadmap
 
-```
-.venv\Scripts\python.exe -m pytest
-cd web && npm run test && npm run build
-```
-
-Xem thêm: plans tại vault `2nd-brain-monkeys/Plans/2608*-*-*-crypto-tracker-forecast/` (SP1 data foundation, SP2 forecast core, SP3 model zoo, SP4 alerts + paper trading + feedback).
+Xem `docs/roadmap.md` — SP6 candidate (stale-mark fail-closed, TP/SL/liq alerts, backfill async, signal→order, position overlay, bounded engine queue) + backlog 19 ý.
