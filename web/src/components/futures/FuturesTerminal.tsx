@@ -3,6 +3,7 @@ import { RefreshCw, UserCircle2 } from 'lucide-react'
 import {
   connectTradeWs,
   fetchAccount,
+  fetchFuturesKlines,
   fetchPositions,
   getToken,
   placeOrder,
@@ -80,6 +81,29 @@ export function FuturesTerminal({ symbol }: { symbol: string }) {
       },
     })
     return cleanup
+  }, [symbol])
+
+  // Seed chart từ REST khi WS kline chưa có frame (fstream push có thể bị drop).
+  // Chỉ seed 1 lần mỗi symbol; KHÔNG đè data WS đã có (guard candleRef.length).
+  useEffect(() => {
+    let cancelled = false
+    const seed = async () => {
+      if (candleRef.current.length > 0) return
+      try {
+        const frames = await fetchFuturesKlines(symbol)
+        if (cancelled || candleRef.current.length > 0) return
+        if (frames.length > 0) {
+          candleRef.current = frames.slice(-MAX_CHART_CANDLES)
+          setCandles(candleRef.current)
+        }
+      } catch {
+        /* REST cũng không có — chart giữ trạng thái rỗng, chờ WS */
+      }
+    }
+    seed()
+    return () => {
+      cancelled = true
+    }
   }, [symbol])
 
   const handleOrder = async (payload: OrderPayload) => {

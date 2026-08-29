@@ -26,12 +26,12 @@ copy .env.example .env
 ```
 start.bat
 REM hoặc:
-.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 9900
 ```
 
 - Server bind **127.0.0.1 duy nhất** (không bao giờ 0.0.0.0)
 - CORS allowlist: `http://localhost:5173`, `http://127.0.0.1:5173`
-- Health: http://127.0.0.1:8000/health
+- Health: http://127.0.0.1:9900/health
 
 ## Test
 

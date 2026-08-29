@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ForecastCompare from '../components/ForecastCompare'
@@ -261,6 +261,8 @@ beforeEach(() => {
 describe('ForecastCompare UI and 3-Cluster Command Deck', () => {
   it('renders 3 main pods (AI, Local, User) and combo buttons', async () => {
     render(<ForecastCompare />)
+    // flush các fetch promise resolve (fetchForecasts/fetchAnalytics) — tránh act warning
+    await act(async () => {})
 
     // 3 Main Pods
     expect(screen.getByRole('button', { name: /Forecast AI/i })).toBeInTheDocument()

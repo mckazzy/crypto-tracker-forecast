@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     jwt_secret: str = ""  # fail-fast: phải set, >= 32 chars (validator bên dưới)
     jwt_expire_minutes: int = 60 * 24  # 24h
     binance_futures_ws_base: str = "wss://fstream.binance.com"
+    # Futures relay fallback (SP5 follow-up): WS im lặng > silence_timeout →
+    # poll REST premiumIndex mỗi rest_poll_interval giây. Base riêng cho fapi —
+    # binance_rest_base (https://api.binance.com) là SPOT, /fapi/v1/* không
+    # hợp lệ trên đó (QA ghi nhận fapi REST không bị chặn, chỉ WS streams drop).
+    binance_futures_rest_base: str = "https://fapi.binance.com"
+    binance_futures_ws_silence_timeout: float = 5.0
+    binance_futures_rest_poll_interval: float = 3.0
 
     @model_validator(mode="after")
     def _validate_jwt_secret(self) -> "Settings":

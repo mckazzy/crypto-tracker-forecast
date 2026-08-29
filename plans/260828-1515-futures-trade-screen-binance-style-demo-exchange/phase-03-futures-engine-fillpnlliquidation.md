@@ -96,10 +96,10 @@ có startup reconciliation, quản lý vị thế theo **Hedge Mode**, và mọi
 
 ## Success Criteria
 
-- [ ] `pytest tests/unit/test_futures_engine.py` pass (≥12 assertions key, gồm startup reconcile + 0-client + Hedge Mode netting).
-- [ ] Full pytest pass.
-- [ ] Engine là 1 asyncio task duy nhất, cancel sạch on shutdown, checkpoint trước khi close.
-- [ ] Không có mutation nào ngoài transaction; balance chỉ đổi qua `balance = balance + ?`.
+- [x] `pytest tests/unit/test_futures_engine.py` pass (≥12 assertions key, gồm startup reconcile + 0-client + Hedge Mode netting).
+- [x] Full pytest pass.
+- [x] Engine là 1 asyncio task duy nhất, cancel sạch on shutdown, checkpoint trước khi close.
+- [x] Không có mutation nào ngoài transaction; balance chỉ đổi qua `balance = balance + ?`.
 
 ## Risk Assessment
 

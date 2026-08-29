@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import OrderForm from '../components/futures/OrderForm'
 import type { OrderPayload } from '../lib/futures'
@@ -19,6 +19,8 @@ describe('OrderForm', () => {
     fireEvent.click(screen.getByTestId('side-long'))
     fireEvent.change(screen.getByTestId('notional-input'), { target: { value: '500' } })
     fireEvent.click(screen.getByTestId('order-submit'))
+    // flush async submit (onSubmit resolve → setNotional/setBusy) trong act
+    await act(async () => {})
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         symbol: 'BTCUSDT',
@@ -36,6 +38,7 @@ describe('OrderForm', () => {
     fireEvent.click(screen.getByTestId('side-short'))
     fireEvent.change(screen.getByTestId('notional-input'), { target: { value: '100' } })
     fireEvent.click(screen.getByTestId('order-submit'))
+    await act(async () => {})
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ side: 'SHORT' }))
   })
 
@@ -46,6 +49,7 @@ describe('OrderForm', () => {
     fireEvent.change(screen.getByTestId('notional-input'), { target: { value: '200' } })
     fireEvent.change(screen.getByTestId('limit-price-input'), { target: { value: '49000' } })
     fireEvent.click(screen.getByTestId('order-submit'))
+    await act(async () => {})
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'LIMIT', price: 49000 }),
     )

@@ -65,9 +65,9 @@ frontend tự tính hiển thị pre-check bằng cùng công thức, đã chố
 
 ## Success Criteria
 
-- [ ] `pytest tests/unit/test_formulas.py` pass 100%.
-- [ ] Không import duckdb/fastapi trong formulas.py.
-- [ ] Công thức liq price long/short đúng hướng buffer MMR.
+- [x] `pytest tests/unit/test_formulas.py` pass 100%.
+- [x] Không import duckdb/fastapi trong formulas.py.
+- [x] Công thức liq price long/short đúng hướng buffer MMR.
 
 ## Risk Assessment
 

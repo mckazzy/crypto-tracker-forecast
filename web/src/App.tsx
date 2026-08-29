@@ -77,7 +77,8 @@ function App() {
   const load = useCallback(() => {
     setIsRefreshing(true)
     setError(null)
-    fetchKlines(symbol, timeframe)
+    // force=true: manual refresh (nút Refresh) bypass throttle 10s của fetchKlines
+    fetchKlines(symbol, timeframe, 500, { force: true })
       .then((r) => setCandles(r.data))
       .catch((e) => setError(String(e.message ?? e)))
       .finally(() => setIsRefreshing(false))
@@ -139,7 +140,7 @@ function App() {
                 <h1 className="text-base sm:text-lg font-bold tracking-tight text-[var(--color-text-main)]">
                   Crypto Tracker
                 </h1>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400 animate-pulse" />
                   LIVE
                 </span>

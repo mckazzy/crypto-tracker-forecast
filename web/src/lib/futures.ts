@@ -211,6 +211,26 @@ export async function fetchMark(symbol: string): Promise<number> {
   return body.mark
 }
 
+export interface KlinesResponse {
+  symbol: string
+  timeframe: string
+  klines: KlineFrame[]
+}
+
+// Seed chart futures từ REST (public market data, không cần auth). Dùng khi WS
+// kline chưa có frame — /api/klines hiện có không có timeframe 1m nên không dùng được.
+export async function fetchFuturesKlines(
+  symbol: string,
+  timeframe = '1m',
+  limit = 200,
+): Promise<KlineFrame[]> {
+  const r = await fetch(
+    `/api/futures/klines/${symbol}?timeframe=${encodeURIComponent(timeframe)}&limit=${limit}`,
+  )
+  const body = await handle<KlinesResponse>(r)
+  return body.klines
+}
+
 // ---- Pre-check math (mirror backend formulas + MMR buffer 0.5%) ----
 
 export const MMR_BUFFER = 0.005
@@ -246,6 +266,8 @@ export function connectTradeWs(opts: UseMarkPriceOptions): () => void {
   let closed = false
   let timer: ReturnType<typeof setTimeout> | null = null
   let reconnectDelay = 1000
+  let lastFrameTs = 0
+  let silenceTimer: ReturnType<typeof setInterval> | null = null
 
   const poll = () => {
     fetchMark(opts.symbol)
@@ -258,8 +280,11 @@ export function connectTradeWs(opts: UseMarkPriceOptions): () => void {
     ws = new WebSocket(wsUrl(opts.symbol))
     ws.onopen = () => {
       reconnectDelay = 1000
+      // baseline silence mới cho connection mới (chưa có frame nào)
+      lastFrameTs = Date.now()
     }
     ws.onmessage = (ev) => {
+      lastFrameTs = Date.now()
       try {
         const frame = JSON.parse(ev.data as string) as RelayFrame
         if (frame.type === 'markPrice') {
@@ -283,11 +308,22 @@ export function connectTradeWs(opts: UseMarkPriceOptions): () => void {
     }
   }
 
+  // Watchdog: WS OPEN nhưng im lặng >10s → poll REST (fstream push frames có thể
+  // bị network drop — onclose không fire nên poll() trong onclose không cover).
+  silenceTimer = setInterval(() => {
+    if (closed) return
+    const s = ws
+    if (s && s.readyState === WebSocket.OPEN && Date.now() - lastFrameTs > 10_000) {
+      poll()
+    }
+  }, 5000)
+
   open()
 
   return () => {
     closed = true
     if (timer) clearTimeout(timer)
+    if (silenceTimer) clearInterval(silenceTimer)
     ws?.close()
   }
 }

@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import random
+import time
 from dataclasses import dataclass, field
 
 import websockets
@@ -76,6 +77,11 @@ class _Upstream:
     refcount: int = 0
     queues: set[asyncio.Queue] = field(default_factory=set)
     task: asyncio.Task | None = None
+    watchdog_task: asyncio.Task | None = None
+    # Baseline đo WS silence (time.monotonic). Tính từ lúc tạo upstream để bao
+    # phủ cả giai đoạn connect/backoff (WS down → watchdog vẫn poll REST).
+    # Chỉ được RESET bởi frame THẬT từ WS (không tính frame tự inject).
+    last_frame_mono: float = field(default_factory=time.monotonic)
 
 
 class BinanceRelay:
@@ -103,6 +109,7 @@ class BinanceRelay:
             if up is None:
                 up = _Upstream(symbol=symbol)
                 up.task = asyncio.create_task(self._run_upstream(up))
+                up.watchdog_task = asyncio.create_task(self._watchdog(up))
                 self._upstreams[symbol] = up
             up.refcount += 1
             return up
@@ -120,6 +127,8 @@ class BinanceRelay:
                 # evict chỉ khi không client VÀ không position/order (check qua engine store)
                 if up.refcount == 0 and not self._symbol_active(symbol):
                     up.task.cancel()
+                    if up.watchdog_task:
+                        up.watchdog_task.cancel()
                     self._upstreams.pop(symbol, None)
 
         # release được gọi từ client disconnect handler (async context)
@@ -157,59 +166,97 @@ class BinanceRelay:
     async def _run_upstream(self, up: _Upstream) -> None:
         url = build_futures_stream_url(up.symbol)
         backoff = 1.0
-        while not self._closed:
-            try:
-                async with websockets.connect(url, ping_interval=20, ping_timeout=20) as ws:
-                    logger.info("futures ws connected: %s", url)
-                    backoff = 1.0
-                    # catch-up: inject 1 tick REST mark ngay sau reconnect (không miss
-                    # liquidation window khi vừa kết nối)
-                    await self._inject_catchup(up)
-                    async for raw in ws:
-                        try:
-                            event = json.loads(raw)
-                            if "data" in event:  # combined-stream envelope
-                                event = event["data"]
-                            frame = normalize_frame(event)
-                            if frame is None:
-                                continue
-                            self._fanout(up, frame)
-                            # engine nhận tick độc lập client
-                            if self.engine is not None and frame["type"] == "markPrice":
-                                q = getattr(self.engine, "_queue", None)
-                                if q is not None:
-                                    await q.put({"symbol": frame["symbol"], "mark": frame["mark"]})
-                        except json.JSONDecodeError:
-                            logger.warning("drop non-JSON frame from %s", up.symbol)
-                        except Exception as e:  # noqa: BLE001
-                            logger.warning("frame handling error %s: %s", up.symbol, e)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:  # noqa: BLE001
-                logger.warning("futures ws disconnected %s (%s), retry in %.1fs", up.symbol, e, backoff)
-                await asyncio.sleep(backoff + random.uniform(0, 0.5))
-                backoff = min(backoff * 2, 60.0)
+        try:
+            while not self._closed:
+                try:
+                    async with websockets.connect(url, ping_interval=20, ping_timeout=20) as ws:
+                        logger.info("futures ws connected: %s", url)
+                        backoff = 1.0
+                        # baseline silence tính từ lúc connect (frame WS thật sẽ reset)
+                        up.last_frame_mono = time.monotonic()
+                        # catch-up: inject 1 tick REST mark ngay sau reconnect (không miss
+                        # liquidation window khi vừa kết nối)
+                        await self._inject_catchup(up)
+                        async for raw in ws:
+                            try:
+                                event = json.loads(raw)
+                                # frame THẬT từ WS → reset watchdog silence baseline
+                                up.last_frame_mono = time.monotonic()
+                                if "data" in event:  # combined-stream envelope
+                                    event = event["data"]
+                                frame = normalize_frame(event)
+                                if frame is None:
+                                    continue
+                                self._fanout(up, frame)
+                                # engine nhận tick độc lập client
+                                if self.engine is not None and frame["type"] == "markPrice":
+                                    q = getattr(self.engine, "_queue", None)
+                                    if q is not None:
+                                        await q.put({"symbol": frame["symbol"], "mark": frame["mark"]})
+                            except json.JSONDecodeError:
+                                logger.warning("drop non-JSON frame from %s", up.symbol)
+                            except Exception as e:  # noqa: BLE001
+                                logger.warning("frame handling error %s: %s", up.symbol, e)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("futures ws disconnected %s (%s), retry in %.1fs", up.symbol, e, backoff)
+                    await asyncio.sleep(backoff + random.uniform(0, 0.5))
+                    backoff = min(backoff * 2, 60.0)
+        finally:
+            # reader chết (cancel/evict/closed) → watchdog cũng dừng, tránh poll REST vô chủ
+            if up.watchdog_task and up.watchdog_task is not asyncio.current_task():
+                up.watchdog_task.cancel()
+
+    async def _fetch_rest_mark(self, symbol: str) -> float | None:
+        """GET fapi premiumIndex → markPrice; None nếu REST lỗi (không raise)."""
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                r = await client.get(
+                    f"{settings.binance_futures_rest_base}/fapi/v1/premiumIndex",
+                    params={"symbol": symbol},
+                )
+                r.raise_for_status()
+                return float(r.json()["markPrice"])
+        except Exception as e:  # noqa: BLE001
+            logger.warning("rest mark fetch failed %s: %s", symbol, e)
+            return None
+
+    async def _emit_mark(self, up: _Upstream, mark: float) -> None:
+        """Fanout frame markPrice + push engine tick — dùng chung catch-up & watchdog."""
+        frame = {"type": "markPrice", "symbol": up.symbol, "mark": mark, "ts": 0}
+        self._fanout(up, frame)
+        if self.engine is not None:
+            q = getattr(self.engine, "_queue", None)
+            if q is not None:
+                await q.put({"symbol": up.symbol, "mark": mark})
 
     async def _inject_catchup(self, up: _Upstream) -> None:
         """Inject 1 tick từ REST mark (premiumIndex) để không miss liquidation window."""
-        try:
-            import httpx
+        mark = await self._fetch_rest_mark(up.symbol)
+        if mark is not None:
+            await self._emit_mark(up, mark)
 
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                r = await client.get(
-                    f"{settings.binance_rest_base}/fapi/v1/premiumIndex",
-                    params={"symbol": up.symbol},
-                )
-                r.raise_for_status()
-                mark = float(r.json()["markPrice"])
-                frame = {"type": "markPrice", "symbol": up.symbol, "mark": mark, "ts": 0}
-                self._fanout(up, frame)
-                if self.engine is not None:
-                    q = getattr(self.engine, "_queue", None)
-                    if q is not None:
-                        await q.put({"symbol": up.symbol, "mark": mark})
-        except Exception as e:  # noqa: BLE001
-            logger.warning("catch-up mark inject failed %s: %s", up.symbol, e)
+    async def _watchdog(self, up: _Upstream) -> None:
+        """WS im lặng > silence_timeout → poll REST premiumIndex mỗi rest_poll_interval.
+
+        Chạy song song _run_upstream. Silence đo bằng time.monotonic() trên frame
+        THẬT từ WS (reset khi frame đến). Poll REST cho tới khi WS sống lại — bao
+        phủ cả lúc WS disconnect/backoff (engine vẫn nhận tick trong lúc chờ).
+        """
+        silence_timeout = settings.binance_futures_ws_silence_timeout
+        poll_interval = settings.binance_futures_rest_poll_interval
+        while not self._closed:
+            if time.monotonic() - up.last_frame_mono > silence_timeout:
+                # im lặng: poll cho tới khi frame WS thật đến (reset) hoặc relay đóng
+                while not self._closed and time.monotonic() - up.last_frame_mono > silence_timeout:
+                    mark = await self._fetch_rest_mark(up.symbol)
+                    if mark is not None:
+                        await self._emit_mark(up, mark)
+                    await asyncio.sleep(poll_interval)
+            await asyncio.sleep(1.0)
 
     def _fanout(self, up: _Upstream, frame: dict) -> None:
         for q in list(up.queues):
@@ -229,4 +276,6 @@ class BinanceRelay:
             for up in self._upstreams.values():
                 if up.task:
                     up.task.cancel()
+                if up.watchdog_task:
+                    up.watchdog_task.cancel()
             self._upstreams.clear()

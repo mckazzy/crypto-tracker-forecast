@@ -14,3 +14,7 @@ models/
 .agentkit/
 .commandcode/
 .kilo/
+
+.pytest-tmp*/
+.pt-*/
+mode700/

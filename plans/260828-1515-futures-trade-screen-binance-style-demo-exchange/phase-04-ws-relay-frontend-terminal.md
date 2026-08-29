@@ -117,14 +117,14 @@ Frontend (tab Trading, thay thế `Trading.tsx` hiện tại — xóa hẳn, kh�
 
 ## Success Criteria
 
-- [ ] WS relay: 1 upstream/symbol, single-flight, fan-out, reconnect + catch-up (fake upstream test).
-- [ ] Engine nhận tick với 0 client connected (test).
-- [ ] UI: đặt market + limit order thành công từ form (nhập notional USDT), thấy position
+- [x] WS relay: 1 upstream/symbol, single-flight, fan-out, reconnect + catch-up (fake upstream test).
+- [x] Engine nhận tick với 0 client connected (test).
+- [x] UI: đặt market + limit order thành công từ form (nhập notional USDT), thấy position
       mới với P&L chạy theo tick.
-- [ ] Đóng lệnh tay + reset ví hoạt động end-to-end qua UI.
-- [ ] FuturesChart render kline WS realtime + price lines; dashboard chart
+- [x] Đóng lệnh tay + reset ví hoạt động end-to-end qua UI.
+- [x] FuturesChart render kline WS realtime + price lines; dashboard chart
       (CandleChart) không đổi, vẫn polling 30s; tab 'Alerts' riêng hiển thị SP4 alerts.
-- [ ] `cd web && npm run test && npm run build` pass; full pytest pass.
+- [x] `cd web && npm run test && npm run build` pass; full pytest pass.
 
 ## Risk Assessment
 

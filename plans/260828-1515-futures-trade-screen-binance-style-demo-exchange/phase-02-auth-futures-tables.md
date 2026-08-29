@@ -96,10 +96,10 @@ KHÔNG ship placeholder fill theo body mark.
 
 ## Success Criteria
 
-- [ ] `pytest tests/unit/test_duckdb_store_futures.py tests/integration/test_auth.py tests/integration/test_futures_api.py` pass.
-- [ ] Full pytest pass (không regression SP1-SP4).
-- [ ] Không có bảng/index nào của SP4 bị sửa.
-- [ ] Test chứng minh: IDOR blocked, client-supplied price bị bỏ qua, JWT fail-closed,
+- [x] `pytest tests/unit/test_duckdb_store_futures.py tests/integration/test_auth.py tests/integration/test_futures_api.py` pass.
+- [x] Full pytest pass (không regression SP1-SP4).
+- [x] Không có bảng/index nào của SP4 bị sửa.
+- [x] Test chứng minh: IDOR blocked, client-supplied price bị bỏ qua, JWT fail-closed,
       reset với OPEN position không double-credit, Store write-lock ngăn ngừa xung đột transaction.
 
 ## Risk Assessment

@@ -242,3 +242,68 @@ async def get_mark(symbol: str, user_id: int = Depends(get_current_user)) -> dic
     import time
 
     return {"symbol": sym, "mark": _engine_mark(sym), "ts": int(time.time() * 1000)}
+
+
+# ---- Public market data (klines seed cho FuturesChart) ----
+# KHÔNG auth — mirror WS frame contract (client dùng thẳng làm KlineFrame).
+
+
+async def _fetch_upstream_klines(symbol: str, timeframe: str, limit: int) -> list | None:
+    """GET klines Binance: fapi primary, spot fallback. None nếu cả 2 fail.
+
+    fapi bị geo-block/error → thử spot (data tương đương cho symbol cùng tên).
+    """
+    import httpx
+
+    attempts = [
+        (settings.binance_futures_rest_base, "/fapi/v1/klines"),
+        (settings.binance_rest_base, "/api/v3/klines"),
+    ]
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        for base, path in attempts:
+            try:
+                r = await client.get(
+                    f"{base.rstrip('/')}{path}",
+                    params={"symbol": symbol, "interval": timeframe, "limit": limit},
+                )
+                r.raise_for_status()
+                return r.json()
+            except Exception as e:  # noqa: BLE001
+                logger.warning("futures klines fetch failed %s%s: %s", base, path, e)
+    return None
+
+
+@router.get("/futures/klines/{symbol}")
+async def get_futures_klines(symbol: str, timeframe: str = "1m", limit: int = 200) -> dict:
+    """Public market data — seed FuturesChart khi WS kline chưa có frame nào.
+
+    Map raw Binance array [open_time, open, high, low, close, volume,
+    close_time, ...] → WS frame contract; `is_closed = close_time < now`.
+    """
+    sym = _validate_symbol(symbol)
+    if timeframe not in ("1m", "5m", "15m", "1h", "4h", "1d"):
+        raise HTTPException(400, "timeframe must be 1m|5m|15m|1h|4h|1d")
+    limit = max(1, min(limit, 1000))
+    import time
+
+    rows = await _fetch_upstream_klines(sym, timeframe, limit)
+    if not rows:
+        raise HTTPException(502, "upstream klines unavailable")
+    now_ms = int(time.time() * 1000)
+    klines = [
+        {
+            "type": "kline",
+            "symbol": sym,
+            "timeframe": timeframe,
+            "open_time": int(raw[0]),
+            "close_time": int(raw[6]),
+            "open": float(raw[1]),
+            "high": float(raw[2]),
+            "low": float(raw[3]),
+            "close": float(raw[4]),
+            "volume": float(raw[5]),
+            "is_closed": int(raw[6]) < now_ms,
+        }
+        for raw in rows
+    ]
+    return {"symbol": sym, "timeframe": timeframe, "klines": klines}

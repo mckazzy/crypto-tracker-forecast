@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
@@ -51,6 +51,7 @@ vi.mock('../lib/futures', () => ({
   fetchOrders: vi.fn(async () => []),
   fetchTrades: vi.fn(async () => []),
   fetchMark: vi.fn(async () => 50000),
+  fetchFuturesKlines: vi.fn(async () => []),
   connectTradeWs: vi.fn(() => () => {}),
 }))
 
@@ -125,6 +126,8 @@ beforeEach(() => {
 describe('App Component and UI Navigation', () => {
   it('renders app branding and live status badge', async () => {
     render(<App />)
+    // flush các fetch promise resolve (setSymbols/setCandles/...) — tránh act warning
+    await act(async () => {})
     expect(screen.getByText('Crypto Tracker')).toBeInTheDocument()
     expect(screen.getByText('LIVE')).toBeInTheDocument()
     expect(screen.getByText(/AI Price Forecast & Real-Time Trading Terminal/i)).toBeInTheDocument()

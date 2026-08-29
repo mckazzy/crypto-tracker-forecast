@@ -2,6 +2,26 @@ from datetime import UTC, datetime, timedelta
 
 import duckdb
 import pytest
+from pathlib import Path
+
+
+@pytest.fixture
+def tmp_path(request) -> Path:
+    """Override pytest's tmp_path — tránh dir bị sandbox khóa ACL.
+
+    DSH sandbox dịch POSIX mode=0o700 (pytest mặc định khi tạo basetemp) thành
+    Windows ACL chỉ owner mới đọc/liệt kê được, và owner đó KHÔNG phải user hiện
+    tại → mọi scandir/rmdir (kể cả cleanup sessionfinish) fail với Access denied.
+    Tạo dir bằng os.makedirs mode mặc định (0o777) → sandbox để accessible.
+    """
+    import os
+    import shutil
+    import uuid
+
+    d = Path(os.path.join(os.getcwd(), f".pt-{uuid.uuid4().hex[:12]}"))
+    os.makedirs(d, exist_ok=True)
+    request.addfinalizer(lambda: shutil.rmtree(d, ignore_errors=True))
+    return d
 
 
 @pytest.fixture

@@ -2,13 +2,17 @@
 
 Monkeypatch websockets.connect để phục vụ frame giả lập từ Binance; verify:
 normalize frame, fan-out 2 clients share 1 upstream, engine nhận tick với 0
-client, invalid symbol bị chặn, disconnect sạch.
+client, invalid symbol bị chặn, disconnect sạch, watchdog REST fallback khi WS
+im lặng.
 """
 import asyncio
 import json
+import time
 
 import pytest
 
+from app.config import settings
+from app.ws import relay as relay_module
 from app.ws.relay import BinanceRelay, build_futures_stream_url, normalize_frame
 
 
@@ -53,6 +57,24 @@ class FakeUpstream:
             for f in self.frames:
                 yield json.dumps(f)
             # giữ connection mở tới khi cancel
+            await asyncio.Event().wait()
+
+        return gen()
+
+
+class DelayedFramesUpstream(FakeUpstream):
+    """Như FakeUpstream nhưng phát frame sau delay 0.05s.
+
+    time.monotonic() trên Windows có resolution thô (có thể cùng tick trong
+    vài ms) — delay đảm bảo frame được xử lý ở monotonic tick KHÁC lúc creation
+    để test reset baseline không bị nhiễu bởi resolution.
+    """
+
+    def __aiter__(self):
+        async def gen():
+            await asyncio.sleep(0.05)
+            for f in self.frames:
+                yield json.dumps(f)
             await asyncio.Event().wait()
 
         return gen()
@@ -189,5 +211,96 @@ class TestRelayLifecycle:
             assert injected == ["BTCUSDT"]
             f = await asyncio.wait_for(q.get(), 1.0)
             assert f["mark"] == 12345.0
+        finally:
+            await relay.shutdown()
+
+
+def _fast_watchdog_settings(monkeypatch):
+    """Rút ngắn silence/poll để test watchdog nhanh (không đợi 5s thật)."""
+    fast = settings.model_copy(
+        update={
+            "binance_futures_ws_silence_timeout": 0.2,
+            "binance_futures_rest_poll_interval": 0.05,
+        }
+    )
+    monkeypatch.setattr(relay_module, "settings", fast)
+    return fast
+
+
+class TestWatchdog:
+    async def test_silence_injects_rest_mark(self, fake_connect, monkeypatch):
+        """WS im lặng > timeout → watchdog poll REST → client queue + engine tick."""
+        engine_ticks = []
+
+        class FakeEngine:
+            def __init__(self):
+                self._queue = asyncio.Queue()
+
+        engine = FakeEngine()
+        relay = BinanceRelay(engine=engine, symbol_list=["BTCUSDT"])
+        _fast_watchdog_settings(monkeypatch)
+        # không inject catch-up (tránh nhầm lẫn với mark của watchdog)
+        async def noop_inject(u):
+            pass
+
+        monkeypatch.setattr(relay, "_inject_catchup", noop_inject)
+        calls = []
+
+        async def fake_fetch(symbol):
+            calls.append(symbol)
+            return 65432.0
+
+        monkeypatch.setattr(relay, "_fetch_rest_mark", fake_fetch)
+        try:
+            q = await relay.subscribe("BTCUSDT")
+            frame = await asyncio.wait_for(q.get(), 3.0)
+            assert frame["type"] == "markPrice"
+            assert frame["mark"] == 65432.0
+            tick = await asyncio.wait_for(engine._queue.get(), 1.0)
+            assert tick == {"symbol": "BTCUSDT", "mark": 65432.0}
+            assert calls, "watchdog phải poll REST khi WS im lặng"
+        finally:
+            await relay.shutdown()
+
+    async def test_no_poll_when_ws_frames_flow(self, fake_connect, monkeypatch):
+        """Frame WS đến liên tục → watchdog KHÔNG poll REST (chỉ catch-up lúc connect)."""
+        calls = []
+
+        async def fake_fetch(symbol):
+            calls.append(symbol)
+            return None  # REST fail — chỉ để đếm số lần gọi
+
+        relay = BinanceRelay(symbol_list=["BTCUSDT"])
+        _fast_watchdog_settings(monkeypatch)
+        monkeypatch.setattr(relay, "_fetch_rest_mark", fake_fetch)
+        try:
+            up = await relay.get_or_create("BTCUSDT")
+            # mô phỏng frame WS liên tục: reset baseline mỗi 0.05s trong 1s
+            for _ in range(20):
+                up.last_frame_mono = time.monotonic()
+                await asyncio.sleep(0.05)
+            up.last_frame_mono = time.monotonic()  # chốt baseline fresh trước assert
+            # Chỉ 1 lần gọi REST = catch-up sau connect; watchdog không poll vì
+            # baseline luôn fresh (< silence_timeout 0.2s).
+            assert calls == ["BTCUSDT"]
+        finally:
+            await relay.shutdown()
+
+    async def test_last_frame_mono_reset_on_ws_frame(self, fake_connect, monkeypatch):
+        """Frame WS thật đến → reset last_frame_mono (baseline silence mới)."""
+        # upstream giả CÓ frame (delay 0.05s → monotonic tick khác lúc creation)
+        fake_connect["BTCUSDT"] = DelayedFramesUpstream(frames=[mark_event(), mark_event()])
+
+        async def fake_fetch(symbol):
+            return None
+
+        relay = BinanceRelay(symbol_list=["BTCUSDT"])
+        monkeypatch.setattr(relay, "_fetch_rest_mark", fake_fetch)
+        try:
+            up = await relay.get_or_create("BTCUSDT")
+            created = up.last_frame_mono
+            await asyncio.sleep(0.3)  # chờ reader connect + đọc frame (fake, không network)
+            assert up.last_frame_mono > created, "frame WS phải reset baseline silence"
+            assert time.monotonic() - up.last_frame_mono < 0.5, "baseline phải fresh sau frame"
         finally:
             await relay.shutdown()

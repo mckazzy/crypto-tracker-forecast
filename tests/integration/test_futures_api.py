@@ -251,6 +251,50 @@ class TestMark:
         assert client.get("/api/futures/mark/DOGEUSDT", headers=_auth(token)).status_code == 400
 
 
+class TestFuturesKlines:
+    """Endpoint public market data — seed chart futures, KHÔNG cần auth."""
+
+    RAW_ROW = [1700000000000, "59900", "60100", "59800", "60000", "100.5", 1700000005999, "99.5", 100, "50.5", "49.5", "0"]
+
+    def test_klines_public_no_auth(self, client, monkeypatch):
+        async def fake_fetch(symbol, timeframe, limit):
+            return [self.RAW_ROW, [1700000006000, "60000", "60200", "59900", "60100", "120.5", 1700000011999, "119.5", 120, "60.5", "59.5", "0"]]
+
+        monkeypatch.setattr("app.api.futures_routes._fetch_upstream_klines", fake_fetch)
+        # KHÔNG auth header — public market data
+        r = client.get("/api/futures/klines/BTCUSDT")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["symbol"] == "BTCUSDT"
+        assert body["timeframe"] == "1m"
+        assert len(body["klines"]) == 2
+        k = body["klines"][0]
+        assert k["type"] == "kline"
+        assert k["open_time"] == 1700000000000
+        assert k["close_time"] == 1700000005999
+        assert k["open"] == 59900.0
+        assert k["high"] == 60100.0
+        assert k["low"] == 59800.0
+        assert k["close"] == 60000.0
+        assert k["volume"] == 100.5
+        # close_time (2023-11) < now → is_closed True
+        assert k["is_closed"] is True
+
+    def test_klines_invalid_symbol(self, client):
+        assert client.get("/api/futures/klines/DOGEUSDT").status_code == 400
+
+    def test_klines_bad_timeframe(self, client):
+        assert client.get("/api/futures/klines/BTCUSDT?timeframe=3m").status_code == 400
+
+    def test_klines_upstream_failure_502(self, client, monkeypatch):
+        async def fake_fetch(symbol, timeframe, limit):
+            return None
+
+        monkeypatch.setattr("app.api.futures_routes._fetch_upstream_klines", fake_fetch)
+        r = client.get("/api/futures/klines/BTCUSDT")
+        assert r.status_code == 502
+
+
 class TestEngineFlow:
     """Phase 3: market order fill qua engine, close tính pnl bằng mark server."""
 
