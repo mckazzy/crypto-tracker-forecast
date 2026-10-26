@@ -31,6 +31,7 @@ export function FuturesTerminal({ symbol }: { symbol: string }) {
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [positions, setPositions] = useState<FuturesPosition[]>([])
+  const [ema20Enabled, setEma20Enabled] = useState(false)
   const candleRef = useRef<KlineFrame[]>([])
 
   const authed = token != null
@@ -202,12 +203,28 @@ export function FuturesTerminal({ symbol }: { symbol: string }) {
       {/* Chart + Order form */}
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
         <div className="surface-card p-3">
+          <div className="flex items-center justify-end mb-2">
+            <button
+              type="button"
+              onClick={() => setEma20Enabled((v) => !v)}
+              aria-pressed={ema20Enabled}
+              data-testid="ema20-toggle"
+              className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition ${
+                ema20Enabled
+                  ? 'bg-blue-500/15 border-blue-500/40 text-blue-500'
+                  : 'bg-[var(--color-surface-2)] border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text-main)]'
+              }`}
+            >
+              EMA 20
+            </button>
+          </div>
           <FuturesChart
             candles={candles}
             entry={activePos?.entry ?? null}
             tp={activePos?.tp ?? null}
             sl={activePos?.sl ?? null}
             liq={activePos?.liq_price ?? null}
+            ema20Enabled={ema20Enabled}
           />
         </div>
         <OrderForm symbol={symbol} mark={mark} onSubmit={handleOrder} />

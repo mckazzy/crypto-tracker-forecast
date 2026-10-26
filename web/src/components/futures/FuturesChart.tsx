@@ -1,13 +1,18 @@
 import { useEffect, useRef } from 'react'
 import {
+  CandlestickSeries,
   ColorType,
   createChart,
   CrosshairMode,
+  LineSeries,
   type IChartApi,
   type ISeriesApi,
   type UTCTimestamp,
 } from 'lightweight-charts'
 import type { KlineFrame } from '../../lib/futures'
+import { ema20 } from '../../lib/indicators'
+
+const EMA20_COLOR = '#3b82f6'
 
 interface FuturesChartProps {
   candles: KlineFrame[]
@@ -15,12 +20,14 @@ interface FuturesChartProps {
   tp?: number | null
   sl?: number | null
   liq?: number | null
+  ema20Enabled?: boolean
 }
 
-export function FuturesChart({ candles, entry, tp, sl, liq }: FuturesChartProps) {
+export function FuturesChart({ candles, entry, tp, sl, liq, ema20Enabled = false }: FuturesChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const emaSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
 
   const isTest = typeof process !== 'undefined' && process.env.NODE_ENV === 'test'
   const isCanvasAvailable = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && !isTest
@@ -47,25 +54,19 @@ export function FuturesChart({ candles, entry, tp, sl, liq }: FuturesChartProps)
         rightPriceScale: { scaleMargins: { top: 0.1, bottom: 0.2 } },
         timeScale: { timeVisible: true, secondsVisible: false },
       })
-      let series: ISeriesApi<'Candlestick'>
-      if ('addCandlestickSeries' in chart && typeof chart.addCandlestickSeries === 'function') {
-        series = chart.addCandlestickSeries({
-          upColor: '#059669',
-          downColor: '#dc2626',
-          borderVisible: false,
-          wickUpColor: '#059669',
-          wickDownColor: '#dc2626',
-        })
-      } else {
-        // @ts-expect-error fallback method (v5 early)
-        series = chart.addSeries?.('Candlestick', {
-          upColor: '#059669',
-          downColor: '#dc2626',
-          borderVisible: false,
-          wickUpColor: '#059669',
-          wickDownColor: '#dc2626',
-        })
-      }
+      // PRE-EXISTING BUG FIX (separate from the EMA feature, revertible on its own):
+      // the old v4-style probe for chart.addCandlestickSeries plus the
+      // chart.addSeries?.('Candlestick', ...) string fallback always threw in
+      // lightweight-charts v5.2.1 (no such method; v5 takes an imported series
+      // definition), and the outer try/catch swallowed it, so the base chart
+      // never rendered. Series options are byte-for-byte unchanged.
+      const series = chart.addSeries(CandlestickSeries, {
+        upColor: '#059669',
+        downColor: '#dc2626',
+        borderVisible: false,
+        wickUpColor: '#059669',
+        wickDownColor: '#dc2626',
+      })
       chartRef.current = chart
       seriesRef.current = series
       const ro = new ResizeObserver((entries) => {
@@ -77,6 +78,7 @@ export function FuturesChart({ candles, entry, tp, sl, liq }: FuturesChartProps)
         chart.remove()
         chartRef.current = null
         seriesRef.current = null
+        emaSeriesRef.current = null
       }
     } catch {
       /* ignore canvas errors in jsdom */
@@ -101,6 +103,36 @@ export function FuturesChart({ candles, entry, tp, sl, liq }: FuturesChartProps)
     )
     chartRef.current?.timeScale().fitContent()
   }, [candles])
+
+  // EMA(20) overlay — opt-in line series. OFF by default: with ema20Enabled
+  // false no series exists, so base chart behaviour is untouched. The series is
+  // created once while enabled and removed when toggled off (or when there are
+  // fewer than 20 candles to seed it); the full window is recomputed on each
+  // candles change. Teardown clears the ref alongside the base chart.
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+    const points = ema20Enabled ? ema20(candles) : []
+    if (points.length === 0) {
+      if (emaSeriesRef.current) {
+        try {
+          chart.removeSeries(emaSeriesRef.current)
+        } catch {
+          /* ignore */
+        }
+        emaSeriesRef.current = null
+      }
+      return
+    }
+    let line = emaSeriesRef.current
+    if (!line) {
+      line = chart.addSeries(LineSeries, { color: EMA20_COLOR, lineWidth: 2 })
+      emaSeriesRef.current = line
+    }
+    line.setData(
+      points.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })),
+    )
+  }, [candles, ema20Enabled, isCanvasAvailable])
 
   // Price lines entry/TP/SL/liq
   useEffect(() => {
